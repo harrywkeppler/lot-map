@@ -479,7 +479,7 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
 // ---- the orb ----------------------------------------------------------------------------------
 
 // Adapted from the particle orb of github.com/ethanplusai/jarvis (MIT, Copyright (c) 2026 Ethan Rogers).
-const ORB_DOTS = 90
+const ORB_DOTS = 56
 const ORB_FRAMES = 10
 const GOLDEN = Math.PI * (3 - Math.sqrt(5))
 
@@ -519,6 +519,102 @@ function drawOrb(now: number, running: boolean, c: Palette): string {
   return dots
 }
 
+// ---- the orb's wider cloud ---------------------------------------------------------------------
+
+const CLOUD_DOTS = 42
+const CLOUD_RADIUS = 132
+
+type Point3 = readonly [number, number, number]
+
+/** A point on the sphere turned about the vertical by `k` of `frames` steps of a full turn, then tipped towards the viewer. */
+function turned(point: Point3, k: number, frames: number, tilt: number): Point3 {
+  const a = (2 * Math.PI * k) / frames
+  const x = point[0] * Math.cos(a) + point[2] * Math.sin(a)
+  const z = -point[0] * Math.sin(a) + point[2] * Math.cos(a)
+  return [x, point[1] * Math.cos(tilt) - z * Math.sin(tilt), point[1] * Math.sin(tilt) + z * Math.cos(tilt)]
+}
+
+const CLOUD: readonly Point3[] = Array.from({ length: CLOUD_DOTS }, (_, i) => {
+  const y = 1 - (2 * (i + 0.5)) / CLOUD_DOTS
+  const ring = Math.sqrt(1 - y * y)
+  return [Math.cos(GOLDEN * (i + 3)) * ring, y, Math.sin(GOLDEN * (i + 3)) * ring] as const
+})
+
+/** Each dot joined to its two nearest, so the cloud reads as a web. */
+const CLOUD_LINKS: readonly (readonly [number, number])[] = (() => {
+  const seen = new Set<string>()
+  const pairs: [number, number][] = []
+  CLOUD.forEach((a, i) => {
+    const near = CLOUD.map((b, j) => ({ j, d: (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2 }))
+      .filter(x => x.j !== i)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 2)
+    for (const { j } of near) {
+      const key = i < j ? `${i}-${j}` : `${j}-${i}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        pairs.push([i, j])
+      }
+    }
+  })
+  return pairs
+})()
+
+/**
+ * The big, faint cloud behind the whole map: dots joined by thin lines, turning once in a minute,
+ * and while something runs, a few bright points travelling along the lines.
+ */
+function drawCloud(now: number, running: boolean, c: Palette): string {
+  const frames = 10
+  const period = running ? 24000 : 70000
+  const timing = `begin="${clock(-(now % period))}" dur="${clock(period)}" repeatCount="indefinite"`
+  const tilt = -0.3
+  const at = (point: Point3, k: number): [number, number, number] => {
+    const t = turned(point, k % frames, frames, tilt)
+    return [CX + t[0] * CLOUD_RADIUS, CY + t[1] * CLOUD_RADIUS, t[2]]
+  }
+  let out = `<g opacity="${running ? 0.9 : 0.6}">`
+
+  const frameOf = (k: number): string => CLOUD_LINKS.map(([i, j]) => {
+    const a = at(CLOUD[i]!, k)
+    const b = at(CLOUD[j]!, k)
+    return `M${n1(a[0])} ${n1(a[1])}L${n1(b[0])} ${n1(b[1])}`
+  }).join('')
+  const web = Array.from({ length: frames + 1 }, (_, k) => frameOf(k)).join(';')
+  out += `<path fill="none" stroke="${c.accent}" stroke-width=".6" opacity=".16" d="${frameOf(0)}"><animate attributeName="d" values="${web}" ${timing}/></path>`
+
+  for (const point of CLOUD) {
+    const f = Array.from({ length: frames + 1 }, (_, k) => at(point, k))
+    out +=
+      `<circle r="1.2" fill="${c.accent}" cx="${n1(f[0]![0])}" cy="${n1(f[0]![1])}">` +
+      `<animate attributeName="cx" values="${f.map(p => n1(p[0])).join(';')}" ${timing}/>` +
+      `<animate attributeName="cy" values="${f.map(p => n1(p[1])).join(';')}" ${timing}/>` +
+      `<animate attributeName="opacity" values="${f.map(p => (0.1 + 0.4 * (p[2] + 1) / 2).toFixed(2)).join(';')}" ${timing}/></circle>`
+  }
+
+  if (running) {
+    // A point runs along a link, over and over, fading in at one end and out at the other.
+    const legs = 5
+    const total = 20
+    for (const n of [3, 17, 31]) {
+      const [i, j] = CLOUD_LINKS[n % CLOUD_LINKS.length]!
+      const f = Array.from({ length: total + 1 }, (_, k) => {
+        const a = at(CLOUD[i]!, (k * frames) / total)
+        const b = at(CLOUD[j]!, (k * frames) / total)
+        const s = (k % legs) / (legs - 1)
+        return [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, k % legs] as const
+      })
+      const tick = `begin="${clock(-(now % period))}" dur="${clock(period)}" repeatCount="indefinite"`
+      out +=
+        `<circle r="2" fill="${c.bone}" cx="${n1(f[0]![0])}" cy="${n1(f[0]![1])}" opacity="0">` +
+        `<animate attributeName="cx" values="${f.map(p => n1(p[0])).join(';')}" ${tick}/>` +
+        `<animate attributeName="cy" values="${f.map(p => n1(p[1])).join(';')}" ${tick}/>` +
+        `<animate attributeName="opacity" values="${f.map(p => (p[2] === 0 || p[2] === legs - 1 ? '0' : '.9')).join(';')}" ${tick}/></circle>`
+    }
+  }
+  return `${out}</g>`
+}
+
 export function drawMap(board: Board, now: number, setup: Setup): string {
   const c = setup.theme === 'light' ? LIGHT : DARK
   const core: Point = { x: CX, y: CY }
@@ -532,6 +628,7 @@ export function drawMap(board: Board, now: number, setup: Setup): string {
   const tone = (e: Entry): [string, string] => (e.station === 'memory' ? [c.mem, c.memHot] : [c.accent, c.hot])
 
   let body = `<rect width="${W}" height="${H}" rx="12" fill="${c.ground}"/>`
+  if (setup.orb) body += drawCloud(now, anyRunning, c)
 
   // Contours around the core.
   for (const [rx, ry] of [[66, 62], [104, 97], [142, 132]]) {

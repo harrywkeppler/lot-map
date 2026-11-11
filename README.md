@@ -72,7 +72,7 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | --- | --- | --- |
 | `language` | `en` | `en`, `ru`, `es`, `fr` or `de` |
 | `coreName` | `CLAUDE` | what the circle in the middle says, up to ten characters |
-| `orb` | on | a slowly turning cloud of particles inside the middle circle, quicker while something runs |
+| `orb` | on | a slowly turning cloud of particles joined by thin lines behind the map, and a small one inside the middle circle; both quicken while something runs, and bright points travel the lines |
 | `memoryServers` | `memory` | MCP servers whose tools light Memory |
 | `memoryCommands` | none | shell commands or scripts that light Memory, matched by how the name starts |
 | `memoryPaths` | none | parts of a path that make a file a memory |

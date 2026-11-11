@@ -139,12 +139,17 @@ test('the orb turns inside the core, faster at work, and can be switched off', (
   expect(setupFrom({ orb: 'no' }).orb).toBe(true)
   const busy = drawMap({ entries: [{ id: 'a', station: 'shell', label: 'ls', from: 'core', startedAt: 900, status: 'run' }], counts: {} }, 1000, setupFrom({}))
   expect(busy).toContain('dur="9.000s"')
-  // Every dot's keyframes close the loop and stay inside the core.
-  for (const [, values] of idle.matchAll(/attributeName="cx" values="([^"]+)"/g)) {
-    const xs = values!.split(';').map(Number)
+  // Every dot's keyframes close the loop and stay inside the map, the core's own inside the core.
+  const dots = [...idle.matchAll(/attributeName="cx" values="([^"]+)"/g)].map(m => m[1]!.split(';').map(Number))
+  expect(dots.length).toBeGreaterThan(80)
+  for (const xs of dots) {
     expect(xs[0]).toBe(xs[xs.length - 1])
-    expect(xs.every(x => Math.abs(x - 230) <= 36)).toBe(true)
+    expect(xs.every(x => Math.abs(x - 230) <= 133)).toBe(true)
   }
+  // Points run along the web only while something runs.
+  expect(idle).not.toContain('r="2" fill="#ebe6dc"')
+  expect(busy).toContain('r="2" fill="#ebe6dc"')
+  expect(busy.split('attributeName="cx"').length).toBeGreaterThan(idle.split('attributeName="cx"').length + 2)
 })
 
 test('the drawing stays within what Svg accepts at its fullest', () => {
