@@ -34,6 +34,8 @@ export type Setup = {
   memoryPaths: readonly string[]
   memoryLabels: ReadonlyMap<string, string>
   hookRecords: boolean
+  /** A turning cloud of particles inside the centre circle. */
+  orb: boolean
   theme: 'auto' | 'dark' | 'light'
 }
 
@@ -55,6 +57,7 @@ export function setupFrom(options: Readonly<Record<string, unknown>> = {}): Setu
     memoryPaths: list(options.memoryPaths),
     memoryLabels,
     hookRecords: options.hookRecords === true,
+    orb: options.orb !== false,
     theme: options.theme === 'dark' || options.theme === 'light' ? options.theme : 'auto',
   }
 }
@@ -473,6 +476,49 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
 }
 
 
+// ---- the orb ----------------------------------------------------------------------------------
+
+// Adapted from the particle orb of github.com/ethanplusai/jarvis (MIT, Copyright (c) 2026 Ethan Rogers).
+const ORB_DOTS = 90
+const ORB_FRAMES = 10
+const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+
+/** Points spread evenly over a unit sphere. */
+const SPHERE: readonly (readonly [number, number, number])[] = Array.from({ length: ORB_DOTS }, (_, i) => {
+  const y = 1 - (2 * (i + 0.5)) / ORB_DOTS
+  const ring = Math.sqrt(1 - y * y)
+  return [Math.cos(GOLDEN * i) * ring, y, Math.sin(GOLDEN * i) * ring] as const
+})
+
+/**
+ * A cloud of dots on a sphere inside the core, turning slowly and faster while something runs.
+ * Each dot's place over one full turn is written out as a few keyframes, so the pane animates it by itself.
+ */
+function drawOrb(now: number, running: boolean, c: Palette): string {
+  const period = running ? 9000 : 26000
+  const timing = `begin="${clock(-(now % period))}" dur="${clock(period)}" repeatCount="indefinite"`
+  const radius = CORE - 4
+  const tilt = 0.42
+  const turn = (point: readonly [number, number, number], k: number): [number, number, number] => {
+    const a = (2 * Math.PI * k) / ORB_FRAMES
+    const x1 = point[0] * Math.cos(a) + point[2] * Math.sin(a)
+    const z1 = -point[0] * Math.sin(a) + point[2] * Math.cos(a)
+    return [x1, point[1] * Math.cos(tilt) - z1 * Math.sin(tilt), point[1] * Math.sin(tilt) + z1 * Math.cos(tilt)]
+  }
+  let dots = ''
+  for (const point of SPHERE) {
+    const frames = Array.from({ length: ORB_FRAMES + 1 }, (_, k) => turn(point, k % ORB_FRAMES))
+    const at = (pick: (f: [number, number, number]) => number): string => frames.map(f => n1(pick(f))).join(';')
+    dots +=
+      `<circle r="1.3" fill="${running ? c.hot : c.accent}" cx="${n1(CX + frames[0]![0] * radius)}" cy="${n1(CY + frames[0]![1] * radius)}">` +
+      `<animate attributeName="cx" values="${at(f => CX + f[0] * radius)}" ${timing}/>` +
+      `<animate attributeName="cy" values="${at(f => CY + f[1] * radius)}" ${timing}/>` +
+      // The far side of the sphere is fainter than the near side.
+      `<animate attributeName="opacity" values="${frames.map(f => (0.15 + 0.75 * (f[2] + 1) / 2).toFixed(2)).join(';')}" ${timing}/></circle>`
+  }
+  return dots
+}
+
 export function drawMap(board: Board, now: number, setup: Setup): string {
   const c = setup.theme === 'light' ? LIGHT : DARK
   const core: Point = { x: CX, y: CY }
@@ -563,6 +609,10 @@ export function drawMap(board: Board, now: number, setup: Setup): string {
     `<animate attributeName="r" values="${CORE + 3};${CORE + 13};${CORE + 3}" ${breath}/>` +
     `<animate attributeName="opacity" values=".05;${anyRunning ? '.24' : '.12'};.05" ${breath}/></circle>` +
     `<circle cx="${CX}" cy="${CY}" r="${CORE}" fill="${c.raised}" stroke="${anyRunning ? c.accent : c.line}" stroke-width="1.3"/>`
+  if (setup.orb) body += drawOrb(now, anyRunning, c)
+
+  // Over the orb, the words get a dark edge so they stay readable.
+  const halo = setup.orb ? ` stroke="${c.raised}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"` : ''
 
   // The context window as a ring around the core: it fills as the session goes and empties at a compaction.
   if (board.context !== undefined) {
@@ -571,14 +621,14 @@ export function drawMap(board: Board, now: number, setup: Setup): string {
     body +=
       `<circle ${ring} stroke="${c.line}" opacity=".7"/>` +
       `<circle ${ring} stroke="${full >= 90 ? c.red : full >= 70 ? c.accent : c.ash}" pathLength="100" stroke-dasharray="${full} 100" transform="rotate(-90 ${CX} ${CY})"/>` +
-      `<text x="${CX}" y="${CY - 19}" text-anchor="middle" ${FONT} font-size="8" fill="${c.dim}">${full}%</text>`
+      `<text x="${CX}" y="${CY - 19}" text-anchor="middle" ${FONT} font-size="8" fill="${c.dim}"${halo}>${full}%</text>`
   }
 
   const switchAge = board.switchedAt === undefined ? Infinity : now - board.switchedAt
   const isSwitching = switchAge >= 0 && switchAge < SWITCH_MS
-  body += `<text x="${CX}" y="${CY + (board.model === undefined ? 6 : 1)}" text-anchor="middle" ${FONT} font-size="${n1(coreSize)}" letter-spacing="${n1(coreSize * 0.147)}" fill="${c.bone}">${escapeXml(setup.core)}</text>`
+  body += `<text x="${CX}" y="${CY + (board.model === undefined ? 6 : 1)}" text-anchor="middle" ${FONT} font-size="${n1(coreSize)}" letter-spacing="${n1(coreSize * 0.147)}" fill="${c.bone}"${halo}>${escapeXml(setup.core)}</text>`
   if (board.model !== undefined) {
-    body += `<text x="${CX}" y="${CY + 17}" text-anchor="middle" ${FONT} font-size="9" fill="${isSwitching ? c.hot : c.ash}">${escapeXml(shortModel(board.model))}</text>`
+    body += `<text x="${CX}" y="${CY + 17}" text-anchor="middle" ${FONT} font-size="9" fill="${isSwitching ? c.hot : c.ash}"${halo}>${escapeXml(shortModel(board.model))}</text>`
   }
 
   // A changed model rings at the core and at its station for a few seconds.

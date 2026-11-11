@@ -60,6 +60,12 @@
       "default": false,
       "description": "Turn on if a hook of yours adds memory records numbered like [#123]: the map then shows them on the Memory station, by number only."
     },
+    "orb": {
+      "type": "boolean",
+      "title": "Particle orb",
+      "default": true,
+      "description": "A slowly turning cloud of particles inside the circle in the middle of the map; it speeds up while something runs."
+    },
     "theme": {
       "type": "string",
       "title": "Colours",

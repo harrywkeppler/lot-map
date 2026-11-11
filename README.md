@@ -72,6 +72,7 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | --- | --- | --- |
 | `language` | `en` | `en`, `ru`, `es`, `fr` or `de` |
 | `coreName` | `CLAUDE` | what the circle in the middle says, up to ten characters |
+| `orb` | on | a slowly turning cloud of particles inside the middle circle, quicker while something runs |
 | `memoryServers` | `memory` | MCP servers whose tools light Memory |
 | `memoryCommands` | none | shell commands or scripts that light Memory, matched by how the name starts |
 | `memoryPaths` | none | parts of a path that make a file a memory |
@@ -118,3 +119,5 @@ Words live in `hooks/text.ts`; a new language is one more table there and one mo
 ## License
 
 [MIT](LICENSE)
+
+The particle orb is adapted from the orb of [JARVIS](https://github.com/ethanplusai/jarvis) by Ethan Rogers (MIT).

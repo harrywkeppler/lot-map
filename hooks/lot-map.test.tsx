@@ -130,6 +130,23 @@ test('a long name shrinks inside the core and cannot break the drawing', () => {
   expect(svg('')).toContain('>CLAUDE<')
 })
 
+test('the orb turns inside the core, faster at work, and can be switched off', () => {
+  const idle = drawMap({ entries: [], counts: {} }, 1000, setupFrom({}))
+  const off = drawMap({ entries: [], counts: {} }, 1000, setupFrom({ orb: false }))
+  expect(idle).toContain('attributeName="cx"')
+  expect(idle).toContain('dur="26.000s"')
+  expect(off).not.toContain('attributeName="cx"')
+  expect(setupFrom({ orb: 'no' }).orb).toBe(true)
+  const busy = drawMap({ entries: [{ id: 'a', station: 'shell', label: 'ls', from: 'core', startedAt: 900, status: 'run' }], counts: {} }, 1000, setupFrom({}))
+  expect(busy).toContain('dur="9.000s"')
+  // Every dot's keyframes close the loop and stay inside the core.
+  for (const [, values] of idle.matchAll(/attributeName="cx" values="([^"]+)"/g)) {
+    const xs = values!.split(';').map(Number)
+    expect(xs[0]).toBe(xs[xs.length - 1])
+    expect(xs.every(x => Math.abs(x - 230) <= 36)).toBe(true)
+  }
+})
+
 test('the drawing stays within what Svg accepts at its fullest', () => {
   const now = 1_000_000
   const stations = ['you', 'model', 'memory', 'files', 'shell', 'web', 'browser', 'agents', 'skills', 'hooks'] as const
